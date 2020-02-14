@@ -1804,9 +1804,7 @@ ListView设计的时候, 当需要动态加载非常大 的数据的时候, 下�
 - 只更新渲染数据变化的那一行, rowHasChanged方法会告诉ListView组件是否需要重新渲染当前那一行.
 - 选择渲染的频率, 默认情况下面每一个 event-loop(事件循环)只会渲染一行(可以同pageSize自定义属性设置). 这样可以把大的工作量进行分隔, 提供整体渲染的性能. 
 
-### 4、实例代码1
-
-
+### 4、示例代码1--ListView 简单使用
 
 ```
 // 导入主框架依赖关系
@@ -1836,11 +1834,13 @@ var ListViewDemo = React.createClass({
 	
 	// 初始化state状态数据
 	getInitialState(){
-		// 1. 设置ListView 的数据源
+		// 1. 指定创建数据源的规则(任意2行2相等), 创建ListView的数据源
 		var ds = new ListView.DataSource({rowHasChange:(r1, r2)=> r1 !== r2})  // 当任意2行的数据不一样时就绘制新的数据
 		
-		// 2. 设置返回数据
+		
 		return {
+			// 2. 使用ListView的数据源, 创建ListView的数据 (ListView要显示的数据已经经过数据源处理过了
+			// (任意2行不相等))
 			dataSource : ds.cloneWithRows(wineArr)
 		}
 	},
@@ -1849,7 +1849,9 @@ var ListViewDemo = React.createClass({
 	render() {
 		return (
 			<ListView 
+				// 设置ListView的数据
 				dataSource={this.state.dataSource}
+				// 设置ListView要渲染的每一行cell
 				renderRow = {this.renderRow}
 			/> 
 		)
@@ -1920,7 +1922,243 @@ var  styles = StyleSheet.create({
 
 
 
+###5、示例代码2--ListView 实现九宫格
 
+
+
+- ListView 实现九宫格布局的技术点
+
+  - 通常情况下, 我们对ListView的操作是纵向的(上下滑), 如果是横向的, 则需要设置ListView的`contentContainerStyle` 属性, 添加 `flexDirection:'row'` 让多个ListView在一样显示, 而且通过`flexWrap:'wrap'` 进行换行.
+  - ListView 实现九宫格的原理就是横向排, 显示不完就换行
+
+  
+
+  ```
+  var React,{Component} from 'react';
+  var {
+  	AppRegistry,
+  	StyleSheet,
+  	Text,
+  	View,
+  	Image,
+  	ListView,
+  	TouchableOpacity
+  } from 'react-native'
+  
+  var Dimensions = require('Dimensions');
+  var ScreenW = Dimensions.get('window').width;
+  var cols = 3;
+  var cellWH = 100;
+  var cellMarin = (ScreenW - cellWH * clos) / (cols + 1);
+  
+  
+  var rowDataArr = require(./jsonData.js)
+  
+  
+  var ListViwDemo = React.createClass({
+  	
+  	getInitialState(){
+  		// 指定数据源的创建规则, 任意2行数据不相同
+  		var ds = new ListView.DataSource({rowHasChange:(r1, r2)=> r1 !== r2})
+  		return {
+  			// 使用已经创建的数据源, 创建ListView的显示数据
+  			dataSource : ds.cloneWithRows(rowDataArr)
+  		}
+  	},
+  	
+  	render(){
+  		return (
+  			<ListView 
+  				style = {styles.listViewStyle}
+  				// 指定ListView要显示的数据
+  				dataSource = {this.state.dataSource}
+  				// 指定ListView要显示的具体row 
+  				renderRow = {this.renderRow}
+  			/>
+  		)
+  	},
+  	
+  	// 自定义ListView 每个row 要渲染的组件
+  	renderRow(rowData, sectionID, rowID, highlightedRow){
+  		<TouchableOpacity>
+  			<View style={styles.rowStyle}>
+  				<Image source = {uri:rowData.icon} style={styles.iconStyle} />
+  				<Text style = {styles.titleStyle}>{rowData.title}</Text>
+  			</View>
+  		</TouchableOpacity>
+  	}
+  
+  });
+  
+  
+  var styles = StyleSheet.create({
+  	listViewStyle : {
+  		flexDirection: 'row',
+  		flexWrap: 'wrap'
+  	},
+  	rowStyle: {
+  		justifyContent:'center',
+  		alignItems:'center',
+  		marginTop:cellMarin,
+  		marginLeft:cellMarin
+  	},
+  	iconStyle : {
+  		width: cellWH,
+  		height: cellWH
+  	}
+  	
+  })
+  
+  ```
+
+  
+
+  
+
+
+
+###6、示例代码3--ListView分组显示
+
+在React Native 中, ScrollView 组件可以使用 stickeyHeaderIndices 轻松实现 sticky 效果, 而使用ListView组件时, 使用stickyHeaderIndices 则不生效.
+
+
+
+- 如何实现滚动时,每个section Header会吸顶?
+
+  在ListView中要实现sticky, 需要使用 cloneWithRowsAndSections方法, 将dataBlob(object), sectionIDs (array), rowIDs(array)三个值传进去
+
+- dataBlob
+
+  - dataBlob包含ListView 所需的所有数据(section header 和 rows), 在ListView渲染时, 使用getSectionData  和 getRowData 来渲染每一行数据. dataBlob 的key值包含sectionID + rowID
+
+    ```
+    //ListView 分组显示要准备的数据
+    
+    // 分组和分行数据
+    var dataBlob = {
+    	'sectionID_1': '第1组组头数据',
+    	'sectionID_1:rowID_1': '第1组,第1行数据',
+    	'sectionID_1:rowID_2': '第1组,第2行数据',
+    	'sectionID_1:rowID_3': '第1组,第3行数据',
+    	'sectionID_2':  '第2组组头数据',
+    	'sectionID_2:rowID_1': '第2组,第1行数据',
+    	'sectionID_2:rowID_2': '第2组,第2行数据',
+    	'sectionID_2:rowID_3': '第2组,第3行数据',
+    	'sectionID_3':  '第3组组头数据',
+    	'sectionID_3:rowID_1': '第3组,第1行数据',
+    	'sectionID_3:rowID_2': '第3组,第2行数据',
+    	'sectionID_3:rowID_3': '第3组,第3行数据',
+    }
+    
+    // 分组号数组
+    var sectionIDs = ['sectionID_1','sectionID_2','sectionID_2']
+    // 行号数组
+    var rowIDs = [['rowID_1','rowID_2','rowID_3'],
+    ['rowID_1','rowID_2','rowID_3'],['rowID_1','rowID_2','rowID_3']]
+    ```
+
+    ```
+    // 初始化状态数据
+    getInitialState(){
+    	// 根据组号, 获取组头数据
+    	var getSectionData = (dataBlob, sectionID)=>{
+    		return dataBlob[sectionID];
+    	}
+    	
+    	// 根据组号 和 行号 获取, 行的数据
+    	var getRowData = (dataBlob, sectionID, rowID)=>{
+    		return dataBlob[sectionID+':'+rowID];
+    	}
+    	
+    	return {
+    		loaded : false,
+    		dataSource:new ListView.DataSource({
+    			getSectionData : getSectionData,
+    			getRowData: getRowData,
+    			rowHasChange: (r1, r2)=> r1 !== r2,
+    			sectionHeaderHasChange :(s1, s2)=> s1 !==S2
+    		})
+    	}
+    },
+    
+    componentDidMount(){
+    	this.loadDataFromJson()
+    },
+    
+    // 从json 中加载数据
+    loadDataFromJson(){
+    	// json 数据
+    	var jsonData = carData.data;
+    	
+    	// 定义相关变量
+    	var dataBlob ={},
+    			sectionIDs = [],
+    			rowIDs = [],
+    			cars = [];
+    			
+    	// 遍历数组把对应的数据放入变量中
+    	for(var i=0; i<jsonData.length; i++){
+    		// 把组号放入 sectionIDs 数组中
+    		sectionIDs.push(i + 1);
+    		// 把每组头部显示的内容放如dataBlob对象中
+    		dataBlob[i+1] = jsonData[i].title;
+    		// 取出该组中所有的的车
+    		cars = jsonData[i].cars;
+    		rowIDs[i] = [];
+    		// 遍历所有的车数组
+    		for(var j=0; j < cars.length; j++){
+    			// 设置行标识
+    			rowIDs[i].push(j);
+    			// 根据唯一的 组+行 标识把数据放入dataBlob 中
+    			dataBlob[i+1 +':' + j] = cars[j]
+    		}
+    	}
+    	
+    	// 刷新状态
+    	this.setState({
+    		dataSource:this.state.dataSource.cloneWithRowsAndSections(dataBlob, sectionIDs, rowIDs);
+    	})
+    },
+    
+    render(){
+    	return (
+    		<View style={styles.outerViewStyle}>
+    			<View style={styles.headTitleStyle}>
+    				<Text>中国汽车品牌</Text>
+    			</View>
+    			<ListView 
+    				dataSource={this.state.dataSource}
+    				renderRow = {this.renderRow}
+    				renderSectionHeader = {this.renderSectionHeader}
+    				style={styles.listViewStyle}
+    			/>
+    		</View>
+    	)
+    },
+    
+    renderRow(rowData, sectionID, rowID){
+    	return (
+    		<TouchableOpacity activeOpacity={0.5}>
+    			<View style={styles.rowStyle}>
+    				<Image source={{uri:rowData.icon}} style={styles.iconStyle}/>
+    				<Text>{rowData.title}</Text>
+    			</View>
+        </TouchableOpacity>
+    	)
+    },
+    
+    renderSectionHeader(sectionData, sectionID){
+    	return(
+    		<View style={styles.sectionHeadStyle}>
+    			<Text>{sectionData}</Text>
+        </View>
+    	)
+    }
+    
+    
+    ```
+
+    
 
 
 
@@ -2786,27 +3024,372 @@ ES5、ES6都是对ECMAScript规范的补充, ES5已经大规模使用了, ES6目
 
 
 
+#十一、TabBar iOS 实现
+
+
+
+## 1、React native 常用组件之TabBarIOS 和 TabBarIOS.Item 组件
+
+在目前市面上的app 中, 大部分都是选项与选项之间的切换, 比如: 微信、微博、QQ空间 等等. 在iOS中, 我们可以通过TabItem类进行实现. 那么, 在React native 中, 我们该如何实心呢? 
+
+![](images/Snip20200214_1.png) 
+
+在React Native 中可以通过TabBarIOS和TabBarIOS.Item 组件来实现选项卡切换效果, 大家可以看到后面带IOS, 所以这个组件是不支持Android的, 当然后面我们可以自定义该组件. 
+
+
+
+##2、TabBarIOS 组件常用属性
+
+- `View` 的所有属性都可以被继承
+- `barTintColor` color 设置tab条的背景色
+- `tintColor` color 设置tab条上被选哪种图标的颜色
+- `tanslucent` bool 设置tab栏是不是半透明的效果
+
+
+
+## 3、TabBarIOS.Item常见的属性
+
+- `badge` number , 在图标的右上方新式小红色的旗袍, 显示信息
+- `icon` image.propTypes.source, Tab按钮自定义的图标, 如果systemicon属性被定义了, 那么该属性会被忽略
+- `onPress` function 当tab按钮被选中的时候进行回调, 你可以设置selected={true} 来设置钻进被选中
+- `selected` bool 该属性标志了页面是否可见, 如果是一个空白的内容页面, 那么一定是忘记了选中任何的一个页面标签的tab
+- `selectedIcon` image.propTypes.souce, 设置当tab按钮被选中的时候显示的自定义图标, 如果systemIcon属性被设置了, 那么该属性会被忽略. 如果定义了icon属性, 但是当前的selectedIcon属性没有设置, 那么该图标会被设置成蓝色
+- `style` 设置样式风格, 继承View的样式各种风格. 
+- `systemIcon` enum('bookmarks', 'contacts', 'downloads' , 'favorites' ,'featured' , 'history', 'more' , 'most-recent','most-viewed', 'renent', 'search', 'top-rated') 系统预定义的图标, 如果你使用这些图标, 那么上面设置的标题, 选中的图标都会被这些系统图标所覆盖
+- `title` string , 在tab按钮图标下显示的标题信息, 如果你设置了StytemIcon属性, 那么该属性会被忽略
+
+## 4、TabBarIOS.Item 案例展示
+
+```
+
+var TabBarDemo = React.createClass({
+	// 初始化选中状态
+	getInitialState(){
+		return {
+			selectedItemName : 'one'
+		}
+	},
+
+	render(){
+
+    return (
+    	{/*最外层的容器*/}
+      <View style={styles.containerStyle}>
+				{/* 导航条*/}
+				<View style={styles.navBarStyle}>
+					<Text>'tabBar demo </Text>
+				</View>
+				
+				{/*tabar 条*/}
+				<TabBarIOS
+					{/*tabbar的背景色*/}
+					batTintColor='black'
+				>
+					 
+					<TabBarIOD.Item
+						systemIcon='contacts'
+						badge=3
+						selected={this.state.selectedItemName == 'one'}
+						onPress = {()=>{this.setState({selectedItemName:'one'})}}
+					>
+						<View><Text>我是 one 页面 </Text></View>
+					</TabBarIOD.Item>
+					
+					 
+					<TabBarIOD.Item
+						systemIcon='contacts'
+						badge=3
+						selected={this.state.selectedItemName == 'two'}
+						onPress = {()=>{this.setState({selectedItemName:'two'})}}
+					>
+						<View><Text>我是 two 页面 </Text></View>
+					</TabBarIOD.Item>
+					
+					<TabBarIOD.Item
+						systemIcon='contacts'
+						badge=3
+						selected={this.state.selectedItemName == 'three'}
+						onPress = {()=>{this.setState({selectedItemName:'three'})}}
+					>
+						<View><Text>我是 three 页面 </Text></View>
+					</TabBarIOD.Item>
+					
+					 
+					<TabBarIOD.Item
+						systemIcon='contacts'
+						badge=3
+						selected={this.state.selectedItemName == 'four'}
+						onPress = {()=>{this.setState({selectedItemName:'four'})}}
+					>
+						<View><Text>我是 four 页面 </Text></View>
+					</TabBarIOD.Item>
+				</TabBarIOS>
+      </View>
+    )
+	}
+})
+
+
+```
 
 
 
 
 
+#十二、React Native 常用组件 navigator 和 navigatorIOS
+
+在开发中, 我们需要实现多个界面的切换, 这时就需要一个导航控制器来进行各种效果的切换. 那么, 在React Native 中有两个组件能实现这样的效果**navigator 和 navigatorIOS** 
+
+其中 Navigator是适配Android 和iOS, 而NavigatorIOS则是包装了UIKit的导航功能, 可以 使用左滑功能来返回上一界面
+
+
+
+![](images/Snip20200214_2.png)  
+
+
+
+##1、Navigator
+
+很多时候,我们需要导航器来应对不同场景(页面)间的切换, 它通过路由对象来分辨不同的场景. 我们这里采用的就是 renderScene方法, 根据指定的路由来渲染.
+
+
+
+### 1、常用属性
+
+- `initialRoute = {{name:'home', component:'homeScene'}}`, 这个 指定了默认的页面, 也就是启动的组件页面. 
+- `configureScene = {()=>{return Navigator.Sceneconfigs.HorizontalSwipeJump}}` , 页面之间跳转时候的动画手势, 可以看这个目录`node_modules/react-native/Libraries/CustomComponents/Navigator/navigatorSceneConfigs.js` (可以看其他跳转的时候的方向)比如: PushFromRight, FloatFromright, FloatFromLeft, FloatFromBottom, FloatFromBottomAndroid, FadeAndroid, HorizontalSwipeJump, HorizontalSwipeJumpFromRight, VerticalUpSwipeJump, VerticalDownSwipeJump 等等.
 
 
 
 
 
+##2、Navigator.IOS 
+
+Navigator.IOS 包装了UIKit的导航功能, 可以使用左滑功能来返回到上一界面
+
+### 1、常用的导航器方法
+
+- **push(route)**  导航器跳转到一个新的路由
+- **pop()** 回到上一页
+- **popN(n)** 回到N页之前, 当N=1的时候效果和 pop()一样
+- **replace(route)** 替换当前页的路由, 并立即加载新的视图
+- **replacePrevious(route)** 替换上一页的路由/视图
+- **replacePreviousAndPop(route)** 替换上一页的路由/视图并且立即切换回上一页. 
+- **resetTo(route)** 替换最停机的路由并且会到它
+- **popToRoute(route)** 一直回到某个指定的路由
 
 
 
+### 2、常用的属性
+
+- barTintColor  导航条背景色
+
+- initialRoute
+
+  ```
+  initialRoute {
+  	component: function, // 路由到对应的版块
+  	title:string, // 标题
+  	passProps:object, // 传递参数
+  	backButtonTitle:string // 返回按钮标题
+  	backButtonIcon: Image.propTypes.source,
+  	leftButtonTitle:string,
+  	leftButtonIcon: Image.propTypes.source
+  	onLeftButtonPress:function,
+  	rightButtonTitle: string,
+  	rightButtonIcon: Image.propTypes.source,
+  	onRightButtonPress:function,
+  	wrapperStyle:[object Objecyt]
+  }
+  ```
+
+  Navigator.IOS 使用路由对象来包含要渲染的子视图, 他们的属性, 以及导航条配置 . push 和 任何其他的导航函数的参数都是这样的路由对象
+
+  比如下面的新闻列表跳转到新闻详情页面:
+
+  ```
+  // 跳转到新闻详情页
+  pushToNewDetail(rowData){
+  	this.props.navigator.push({
+  		title:'新闻详情',
+  		component:NewsDetail,
+  		passProps:{rowData}
+  	});
+  }
+  ```
+
+- itemWrapStyle View#style, 导航器中组件的默认属性, 一个常见的用途是设置所有页面的背景色
+
+- navigatorBarHidden bool, 一个bool值, 决定导航栏是否显示. 
+
+- tintColor string 导航栏上按钮的颜色
+
+- titleTextColor string 导航器标题的文字颜色
+
+- translucent bool 一个布尔值, 决定是否是导航条是半透明
 
 
 
+##十三、React Native 网络 
 
 
 
+##1、React Native 使用Fetch发送网络请求
+
+React Native Fetch网络请求文档地址: https://reactnative.cn/docs/network/
+
+React Native 提供了和web标准一致的Fetch API, 用于满足开发者访问网络的需求. 
 
 
+
+### 1、发起请求
+
+
+
+要从任一地址获取内容的话, 只需简单的将网络地址作为参数传递给Fetch方法即可
+
+> fetch 这个词本身的意思就是 获取 的意思
+
+```
+fetch('https://mywebsite.com/mydata.json');
+```
+
+Fetch 还有可选的第二个参数, 可以用来定制HTTP请求一些参数. 你可以指定header参数, 或是指定使用POST方法, 又或是提交数据等.
+
+```
+fetch('https://mywebsite.com/endpoint',{
+	method:'POST',
+	headers:{
+		Accept:'application/json',
+		'Content-Type': 'application/json',
+	},
+	body:JSON.stringfy({
+		firstParam:'yourValue',
+		secondParam:'yourOtherValue'
+	})
+});
+```
+
+提交数据的格式关键取决于 headers 中 `Content-Type`. `Content-Type` 有很多种, 对应 body 的格式也有区别. 到底应采用什么样的`Content-Type` 取决于服务器端, 所以请求和服务器端的开发人员沟通清楚. 常用的`Content-Type` 除了上面的`application/json`, 还有传统的网页表单形式, 示例如下:
+
+```
+fetch('https://mywebsite.com/endpoint',{
+	method:'POST',
+	headers:{
+		'Content-Type':'application/x-www-form-urlencoded'
+	},
+	body:'key1=value1&key2=value2'
+})
+```
+
+
+
+### 2、处理服务器的响应数据
+
+上面的例子演示了如何发起请求, 很多情况下, 你还需要处理服务器回复的数据.
+
+网络请求天然是一种异步操作.  Fetch 方法返回一个Promise, 这种模式可以简化异步风格的代码. 
+
+```
+function getMoviesFromApiAsync(){
+	
+	return fetch('https://facebook.github.io/react-native/movies.json')
+						.then((response)=>response.json())
+						.then((responseJson)=>{
+							return responseJson.movies;
+						})
+						.catch((error)=>{
+							console.error(error);
+						})
+	
+}
+```
+
+你也可以在 React Native 应用中使用 ES7标准中的`async/await`  语法
+
+```
+// 注意这个方法前面有 async关键字
+async function getMoviesFromApi(){
+	try{
+		// 注意这里的await 语句, 其所在的函数必须有async关键字
+		let response = await fetch('https://facebook.github.io/react-native/movies.json');
+		let responseJson = await response.json();
+		return responseJson.movies;
+	}
+	catch(error){
+		console.error(error)
+	}
+}
+```
+
+别忘了 catch 住 `fetch` 可能抛出的异常, 否则出错时你可能看不到任何提示
+
+```
+import React from 'react'
+import {
+	FlatList,
+	ActivityIndicator,
+	Text,
+	View
+} from 'react-native'
+
+export default class FetchExample extends React.Component{
+	
+	constructor(props){
+		super(props);
+		// 初始化state, 状态机
+		this.state =  {isLoading: true}
+	}
+	
+	render(){
+	
+		//正在加载网络数据
+		if(this.state.isLoading){
+			return  (
+				<View style={{flext:1, padding:20}}> 
+					<ActivityIndicator/>
+				</View>
+			)
+		}
+		
+		return (
+			<View style={{flex:1, padding:20}}>
+				<FastList
+					data={this.state.dataSource}
+					renderItem={({item})=><Text>{item.title}, {item.releaseYear}</Text>}
+					keyExtractor={(item, index)=>item.id}
+				/>
+			</View>
+		)
+	}
+	
+	componentDidMount(){
+		return fetch('https://facebook.github.io/react-native/movies.json')
+							.then(response)=>response.json()
+							.then(responseJson)=>{
+								this.setState({
+									isLoading:false,
+									dataSource:responseJson.movies
+								},function(){
+								
+								}) 
+							})
+							.catch((error)=>{
+								console.error(error);
+							})
+							
+	}
+}
+```
+
+> - 默认情况下，iOS 会阻止所有 http 的请求，以督促开发者使用 https。如果你仍然需要使用 http 协议，那么首先需要添加一个 App Transport Security 的例外，详细可参考[这篇帖子](https://segmentfault.com/a/1190000002933776)。
+> - 从 Android9 开始，也会默认阻止 http 请求，请参考[相关配置](https://blog.csdn.net/qq_40347548/article/details/86766932)
+
+
+
+## 2、使用其它的网络库
+
+待续
 
 
 
