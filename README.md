@@ -3136,15 +3136,116 @@ var TabBarDemo = React.createClass({
 
 
 
-#十二、React Native 常用组件 navigator 和 navigatorIOS
+#十二、React Native 常用组件之 navigator 和 navigatorIOS
 
 在开发中, 我们需要实现多个界面的切换, 这时就需要一个导航控制器来进行各种效果的切换. 那么, 在React Native 中有两个组件能实现这样的效果**navigator 和 navigatorIOS** 
 
-其中 Navigator是适配Android 和iOS, 而NavigatorIOS则是包装了UIKit的导航功能, 可以 使用左滑功能来返回上一界面
-
-
+其中 Navigator是适配Android 和iOS. 而NavigatorIOS则是包装了UIKit的导航功能,可以 使用左滑功能来返回上一界面只能适配iOS
 
 ![](images/Snip20200214_2.png)  
+
+
+
+- 两个核心要素
+  - navigator, 一个用来管理所有界面对象的栈, 人称之"路由栈" , 学名导航
+  - route, 路由栈里的每一个对象, 称之为"路由", 用来存储每一个页面组件以及一些需要传递给对应界面的props参数
+
+- 使用Navigator 来导航整个App页面
+
+  - 在iOS中, 我们都是通过导航控制器进行栈的操作, 我们需要把Navigator放在一个常驻的界面中.
+  - 通常都是放在整个ReactNative工程的入口 `index.ios.js/  index.android.js` 中
+
+- 为项目添加Navigator 控制
+
+  - 引入Navigator 组件
+
+  - 通用模板
+
+    ```
+    rturn (
+    	<Navigator 
+    		// 初识路由
+    		initialRoute={name:name, component:component}
+    		// 界面过渡动画
+    		configureScene={()=>{
+    			return Navigator.SceneConfigs.PushFromRight;}
+    		}
+    		renderScene={(route,navigator)=>{
+    			let Component = route.component;
+    			return <Component {...route.passProps} navigator={navigator}>
+    		}}
+    	/>
+    )
+    ```
+
+    > - getCurrentRoutes() 获取当前栈里的路由, 也就是push进来, 没有pop掉的哪些
+    >
+    > - jumpBack() 跳回之前的路由, 当然前提是保留现在的, 还可以再跳回来, 会给你保留原样
+    >
+    > - jumpForward() 上一个方法不是跳到了之前的路由么, 用这个跳回来就好了.
+    >
+    > - jumpTo(route) 跳转到已有的场景并且不卸载
+    >
+    > - push(route) 跳转到新的场景, 并且将场景入栈, 你可以稍后跳转过去
+    >
+    > - pop() 
+    >
+    > - replace(route)
+    >
+    > - replaceAtIndex(route,index)
+    >
+    > - replacePrevious(route)
+    >
+    > - immediatelyResetRouteStack(routeStack) 用新的路由数组来重置路由栈
+    >
+    > - popToRoute(route)
+    >
+    > - popToTop()
+    >
+    > - {...route} 这一句是es6语法, 表示将route中所有的键值对以属性赋值的方式展开, 也就是{name:'pober', gender:'man'} 到 name='pober' gender='man' 之间的转换. 这样就把route对象中所有的键值对很容易的放到route.component组件的props属性中去. 因此, 这个语法在自定义控件的时候也经常用到, 主要用来兼容组件中其它所有的属性, 如: 自定义ListView 兼容官方ListView的所有属性.
+    >
+    > - passProps 这是我们自定义的key, 后边会提到. 同样是可选的, 在对应页面中使用navigator路由栈进行脚本的操作, 在上边也提到了navigator的 一系列方法, 这里我们核心介绍一下push和pop操作
+    >
+    > - push(route) 跳转到下一个场景同时将它入栈
+    >
+    >   ```
+    >   pushToHomePage(){
+    >   	// 从当前页跳转到 HomePage 页 
+    >   	this.props.nevigator.push({
+    >   		component:HomePage,
+    >   		passProps:{name:'主页'}//传递参数, 可选, {} 里都是键值对
+    >   	})
+    >   }
+    >   ```
+    >
+    >   以上这段代码,可以放在任何你需要监听跳转的地方, 同样也可以传递任何你想传递的参数
+    >
+    > - component , 就是我们需要呈现的组件
+    >
+    > - passProps, 这是NAVIG阿投入IOS中常用的一个属性, 这里我们加上是为了让他们看起来更加统一一些, 有了前边 {...route}我们显然是没必要再去包裹一层参数
+
+    - `initialRoute` ,初识路由, 也就是我们需要在navigator栈底放置的路由, 因为此时也是栈底, 因此也就是初始化整个App的首页
+
+    - `configureScene`, 设置页面切换动画, 具体的值大家可以在`node_modules/react-native/Lobraries/CustomComponents/Navigator/NavigatorSceneConfigs.js源库中查找.
+
+      ```
+      - PushFromRight
+      - FloatFromRight
+      - FloatFromLeft
+      - FloatFromBottom
+      - FloatFromBottomAndroid
+      - FadeAndroid
+      - HorizontalSwipeJump
+      - HorizontalSwipeJumpFromRight
+      - VerticalUpSwipeJump
+      - VerticalDownSwipeJump
+      ```
+
+    - `renderScene`, 渲染当前路由场景, 也就是渲染栈顶路由, 回调方法里一个参数是当前route,另一个是navigator路由栈. 
+
+    - 
+
+  
 
 
 
@@ -3389,9 +3490,82 @@ export default class FetchExample extends React.Component{
 
 ## 2、使用其它的网络库
 
-待续
+React Native 中已经内置了`XMLHttpRequest API` (也就是俗称的 ajax). 一些基于XMLHttpRequest封装的第三方库也可以使用, 例如: `axios 或者frisbee` 等. 但是注意不能使用jQuery, 因为jQuery中还使用了很多浏览器中才有而RN中没有的东西, (所以也不是所有的web中的ajax库都可以直接使用)
+
+```
+const request = new XMLHttpRequest();
+request.onreadystatechange = (e) => {
+  if (request.readyState !== 4) {
+    return;
+  }
+
+  if (request.status === 200) {
+    console.log('success', request.responseText);
+  } else {
+    console.warn('error');
+  }
+};
+
+request.open('GET', 'https://mywebsite.com/endpoint/');
+request.send();
+```
+
+> 需要注意的是，安全机制与网页环境有所不同：
+>
+> 在应用中你可以访问任何网站，没有[跨域](http://en.wikipedia.org/wiki/Cross-origin_resource_sharing)的限制。
+
+
+
+##3、WebSocket 支持
+
+React Native 还支持`WebSocket`, 这种协议可以在单个TCP连接上提供全双工的通信信道.
+
+```
+const ws = new WebSocket('ws://host.com/path');
+
+ws.onopen = () => {
+  // connection opened
+  ws.send('something'); // send a message
+};
+
+ws.onmessage = (e) => {
+  // a message was received
+  console.log(e.data);
+};
+
+ws.onerror = (e) => {
+  // an error occurred
+  console.log(e.message);
+};
+
+ws.onclose = (e) => {
+  // connection closed
+  console.log(e.code, e.reason);
+};
+```
+
+>  现在你的应用已经可以从各种渠道获取数据了，那么接下来面临的问题多半就是如何在不同的页面间组织和串联内容了。
 
 
 
 
 
+
+
+#十四、项目实战
+
+![](images/Snip20200215_9.png)
+
+
+
+在这个项目中, 我们为了实现iOS和Android中 tabbar 和 navigator 的适配, 我们需要用到第三方的框架
+
+- 安装 `react-native-tab-navigator` 第三方TabBar模块 
+
+  >  这个模块,即时配安卓又适配iOS, 使用npm 安装完成后, 里面会有一个READ.md说明文档, 照着做即可.
+
+  ```
+  npm install react-native-tab-navigator --save
+  ```
+
+  
