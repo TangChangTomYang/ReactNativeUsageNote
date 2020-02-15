@@ -3589,6 +3589,7 @@ ws.onclose = (e) => {
 - 原理: React Navigation 为页面的 props 上挂载了 navigation 对象, 可用来做路由跳转，在做页面跳转时可以携带参数/回调方法前往目标页面， 从而达到传参的目的
 
   > 说明: 这是官方推荐，也是我们在业务开发中用得最多，最为推崇的一种传参方式, 思想与 web 在 querystring 上带参跳转类似，只是实现方式略微不同, 举例：
+
   - 正向传值:
 
   ```
@@ -3740,3 +3741,854 @@ loadOrderData = async () => {
 个人建议: 在 react-navigation 跳转传值 与 DeviceEventEmitter 维护不方便的情况下才使用, 但尽量少用, 以免造成全局属性的污染与冲突
 
 总结了5种常见的参数/数据传递的方法，以个人角度来看， 推荐顺序为 React Navigation 导航传值 > DeviceEventEmitter 触发事件并传值 > AsyncStorage Key-Value 式的存储传参, 最后 两种是在特殊场景下才会去使用，所以在合适的场景去选择合适的方式传值，会为React Native项目的开发带来事半功倍的效果．
+
+
+
+
+
+#十六、React native 触摸事件 (基础篇)
+
+在基础篇，对RN中的触摸事件做了详细的介绍。相信大家对于触摸事件流程机制有了更为清晰的认识
+
+## 1、RN系统触摸组件
+
+
+
+RN中实现按钮单击组件的方式很简单，系统为我们提供了四种方式：
+
+（1）TouchableOpacity
+
+（2）TouchableHightLight
+
+（3）TouchableNativeFeedback(仅限Android)
+
+（4）TouchableWithoutFeedback
+
+以上四种方式相信大家都不陌生，都是以 Touchable* 开始，实现单击事件只需要声明onPress属性即可。以 TouchableOpacity 为例：
+
+```
+<TouchableOpacity onPress={()=>this.onPress()}>
+   <Text>单击按钮</Text>
+</TouchableOpacity>
+```
+
+
+除了onPress属性，系统还为我们提供了:
+
+（1）onLongPress
+
+（2）onPressIn
+
+（3）onPressOut
+
+顾名思义，onLongPress即为长按点击、onPressIn点击开始（手指按下）、onPressOut点击结束（手指离开）。
+
+```
+<TouchableOpacity 
+    onPressIn={()=>this.onPressIn()}
+    onPressOut={()=>this.onPressOut()}
+    onLongPress={()=>this.onLongPress()}
+    onPress={()=>this.onPress()}>
+    <Text>点击按钮</Text>
+</TouchableOpacity>
+```
+
+四个方法也提供了触摸事件数据，所以也可以写成如下：
+
+```
+<TouchableOpacity 
+    onPressIn={(evt)=>this.onPressIn(evt)}
+    onPressOut={(evt)=>this.onPressOut(evt)}
+    onLongPress={(evt)=>this.onLongPress(evt)}
+    onPress={(evt)=>this.onPress(evt)}>
+    <Text>点击按钮</Text>
+</TouchableOpacity>
+```
+
+evt 中包含了关于触摸事件相关的数据，大部分情况下我们只需要关心 nativeEvent，其大致结构如下：
+
+![](images/20181017123236957.jpeg)  
+可以看到 nativeEvent 中包含了手指触摸的一些坐标及时间戳参数，关于具体的参数含义我们后面再进行具体探讨。
+
+
+
+## 2、自定义触摸事件处理
+
+从Touchable* 组件的使用可以看出，其内部实现了触摸之后的事件处理。开发者以简单的属性声明方式，即可完成对于点击事件的操作。且RN组件默认不支持触摸事件的处理（Text组件除外），如果想要处理触摸事件，首先要【申请】成为事件响应者，当成为事件响应者之后，即可处理发生在该组件之上的触摸事件，例如：按下（Start）、移动（Move）、弹起（Release），最终释放响应行为。即一次完整的触摸流程大致如下：
+
+> 申请成为触摸事件响应者 -> 成为触摸事件响应者 -> 处理触摸事件 -> 释放触摸事件 -> 触摸事件结束
+
+整个事件流程中，组件的事件身份分为两种：非事件响应者、事件响应者。
+
+
+
+**非事件响应者** 
+
+**授权** 
+
+在上述部分我们提到，RN中的组件除Text外，默认是不能进行触摸事件处理响应的，即非事件响应者。如果要进行触摸事件处理，首先需要申请成为触摸事件响应者。对应申请的处理方法如下：
+
+> View.props.onStartShouldSetResponder(evt): => bool  
+>
+> View.props.onMoveShouldSetResponder(evt): => bool  
+
+从名称可以看出，onStartShouldSetResponder在手势触开始时（按下）被触发，onMoveShouldSetResponder在手势滑动时被触发。两个方法都需要返回boolean类型值：onStartShouldSetResponder 在手指按下屏幕时，RN系统会询问当前组件是否需要申请成为事件响应者，true表示成为事件响应者，false则不处理。同样，onMoveShouldSetResponder表示手指在屏幕滑动时，RN系统询问当前组件是否需要申请成为事件响应者，true表示成为事件响应者，false则不处理。
+
+
+
+**授权结果** 
+
+当接收到上述方法返回true时，组件申请成为响应者，并处理接收后续触摸事件。在同一时间只能有一个事件处理者，此时，RN系统会协调当前所有组件到事件处理，所以不是每个组件申请都能成功，RN 通过如下两个回调来通知告诉组件它的申请结果：
+
+> View.props.onResponderGrant: (evt) => { }
+>
+> View.props.onResponderReject: (evt) => { }
+
+onResponderGrant表示申请成功，组件已经成为事件响应者，并且接收后续的触摸事件。在该方法中，我们可以做一些手势事件初始化的操作。onResponderReject表示申请失败，失败的原因一般为其他组件正在进行触摸事件的处理，并且不放弃当前触摸事件的权限，在你申请时被拒。
+
+
+
+
+
+**事件响应者** 
+
+通过上述步骤，当组件申请成为事件响应者后，后续当触摸事件行为都会被该组件拦截处理，并触发对应都行为函数。触摸事件行为函数如下：
+
+> View.props.onResponderStart: (evt) => { }
+>
+> View.props.onResponderMove: (evt) ={}
+>
+> View.props.onResponderEnd: (evt) => { }
+>
+> View.props.onResponderRelease: (evt) => { }
+
+
+
+可以很明显的看到，四个事件行为方法都是以【onResponder】作为前缀，后面紧接行为方式名称。
+
+> Start：表示手指按下，开始进行触摸行为。
+>
+> Move：手指触摸屏幕并进行移动，此回调函数触发非常频繁，尽可能不要做过多任务处理。
+>
+> End：触摸行为结束，手指弹起离开屏幕。
+>
+> Release：当手指弹起离开屏幕时，事件行为结束，一次完整的触摸事件结束，并释放当前触摸行为权限，当前组件不再是事件响应者。
+
+
+
+
+
+**释放响应者权限** 
+
+当前组件正在进行触摸事件行为处理且没有结束时，其他组件也可能会请求系统申请成为事件响应者，此时RN会询问当前组件
+
+是否可以释放当前响应者身份，将权限让给其他组件。对应的函数如下：
+
+>  View.props.onResponderTerminationRequest: (evt) => bool  
+>
+> View.props.onResponderTerminate: (evt) => {}  
+
+
+
+Termination 即中止，onResponderTerminationRequest 方法需要返回boolean类型值，true 表示可以立刻释放当前响应者角色，并触发 onResponderTerminate 方法，告知当前组件触摸事件被中止。
+
+触摸事件被意外中断也会触发 onResponderTerminate 方法，例如：手机来电，自动关机，消息等。
+
+
+
+**触摸事件响应参数** 
+
+从系统提供的 Touchable* 点击组件，到自定义触摸组件，可以发现触摸行为函数都有 event 参数，在文章开始介绍 Touchable* 组件时，我们说到 event 参数中包含一个触摸事件数据 `nativeEvent，在该属性中包含了触摸事件中的相关参数，具体如下：`
+
+>  changedTouches：[{…}]  触摸事件集合，记录从上次到本次触摸事件到所有事件，在触摸过程中，由于非常频繁，可能有没有及时反馈，系统用这个属性来批量上报。
+>
+> identifier：   手指触摸事件ID，多点触控场景下，用来区分手指的触摸事件。
+>
+> locationX：  触摸点在组件横向上的位置。
+>
+> locationY：  触摸点在组件纵向上的位置。
+>
+> pageX：       当前组件触摸点相对屏幕横向上的位置。
+>
+> pageY：       当前组件触摸点相对屏幕纵向上的位置。
+>
+> target：        当前组件ID。
+>
+> timestamp：当前触摸的事件的时间戳，可以用来进行滑动计算。
+>
+> touches：[{…}]   触摸事件集合，多点触摸场景下，包含当前所有触摸点的事件参数。
+
+
+
+在日常开发中常用的属性是 locationX|Y、pageX|Y。常用触摸事件的参数是从原生层传递到RN层，即参数数值是作为原生层到像素值，如果需要转换成RN中到逻辑单位，可以用如下方式：
+
+const px = evt.nativeEvent.locationX / PixelRatio.get()
+
+
+
+
+
+##3、触摸事件拦截
+
+在第二小节中，我们花了大量篇幅来介绍自定义触摸事件的相关行为函数，触摸参数等。可以看到所有的触摸行为都是基于一个View组件之上。在日常开发中，我们肯定离不开View组件嵌套实现一个视图效果。那么嵌套组件对于触摸事件响应情况又是怎样的？
+
+了解 Native 开发的朋友肯定不陌生，在Native层系统处理触摸事件传递方式使用的是 冒泡机制。即事件的响应是从布局最底层的组件开始，逐层向父布局组件传递。同样，RN系统也提供了与 Native 层相同的触摸事件传递机制，用来保证在嵌套布局中的所有组件都可以得到响应处理。在某些情况下，父组件可能需要单独处理触摸事件，不需要交给子组件处理，即父组件拦截掉触摸事件的响应，消耗完成不再向下传递。同样，RN系统提供了两个函数，用来实现授权父组件事件拦截机制：
+
+> View.props.onStartShouldSetResponderCapture: (evt)=> bool
+>
+> View.props.onMoveShouldSetResponderCapture: (evt)=> bool
+
+在触摸事件 开始，RN父布局组件会回调 onStartShouldSetResponderCapture，询问是否要拦截事件，自己接收处理， true 表示拦截。在触摸 滑动 事件时，RN父布局组件会回调 onMoveShouldSetResponderCapture，询问是否要拦截事件，自己接收处理， true 表示拦截。
+
+举个?，假设有A，B，C 三个组件，布局为 C是B的子组件，B是A的子组件：
+
+![20181017160350720](images/20181017160350720.png) 
+
+
+（1）A组件的 onStartShouldSetResponderCapture 返回 false，表示不拦截，事件传递到B。
+
+（2）B组件的onStartShouldSetResponderCapture 返回 true，表示拦截，事件不再向下传递，即事件不会传递到C。
+
+（3）此时B组件开始向系统申请事件响应者权限，即调用 on*ShouldSetResponder，如果返回 true，则表示授权成功，此时B组件成为事件响应者，执行Start、Move 等事件行为。
+
+（4）如果B组件不申请，则系统询问A组件是否申请成为事件响应者。即调用A组件等on*ShouldSetResponder，如果返回 true，则表示授权成功，此时A组件成为事件响应者，执行 Start、Move 等事件行为。
+
+
+
+
+
+
+
+
+
+#十七、React native 触摸事件 (进阶篇)
+
+本篇，同样延续基础篇中结尾的内容，对触摸事件的执行流程从代码层执行流程进行更深的说明，并使用RN系统提供的高级API作为实战，完成高仿微信通讯录字母索引导航栏的效果。
+
+![20181026123808611](images/20181026123808611.png)
+
+
+
+
+
+## 1、RN系统触摸组件触发机制
+
+在基础篇中，我们对RN系统提供的触摸组件（Touchable*）作了一些介绍，并通过代码来说明如何实现点击相关的事件，如下：
+
+```
+<TouchableOpacity 
+    style={ styles.btn }
+    onPressIn={(evt)=>this.onPressIn(evt)}
+    onPressOut={(evt)=>this.onPressOut(evt)}
+    onLongPress={(evt)=>this.onLongPress(evt)}
+    onPress={(evt)=>this.onPress(evt)}>
+    <Text style={ styles.btnText }>点击按钮</Text>
+</TouchableOpacity>
+```
+
+事件的实现方式很简单，使用 console.log 打印当前的事件名称。
+
+
+
+**测试用例**
+
+> （1）手指按下，不弹起
+>
+> （2）手指按下，弹起
+>
+> （3）手指按下，不弹起，并滑动出View范围
+
+
+
+**测试结果**
+
+
+
+（1）手指按下，不弹起
+
+> 未绑定长按事件
+>
+> onPressIn
+>
+> 绑定长按事件
+>
+> onPressIn
+> onLongPress
+
+（2）手指按下，弹起
+
+> 非长按（单击）
+>
+> onPressIn
+> onPressOut
+> onPress
+>
+> 长按
+>
+> onPressIn
+> onLongPress
+> onPressOut
+
+（3）手指按下，不弹起，并滑动出View范围
+
+> 非长按
+>
+> onPressIn
+> onPressOut
+>
+> 长按
+>
+> onPressIn
+> onLongPress
+> onPressOut
+
+
+
+
+
+**结论**
+
+从上述三种触发方式中打印的log，我们可以对 `onPress,onPressIn,onPressOut,onLongPress` 事件的触发条件和触发顺序有一个比较清晰的了解： 
+
+（1）未绑定长按事件，手指按下，不弹起只会触发 onPressIn，反之，则会触发 onPressIn -> onLongPress
+
+（2）未绑定长按事件，手指按下，弹起，即单击，会触发 onPressIn -> onPressOut -> onPress，反之，如果长按后弹起，会触发onPressIn -> onLongPress -> onPressOut
+
+（3）未绑定长按事件，手指按下，不弹起，并滑动出View范围，组件会自动失去焦点，并会触发 onPressIn -> onPressOut，反之，则会触发 onPressIn -> onLongPress -> onPressOut
+
+可以看到，系统为我们提供了触摸组件相对来说较为简单，基本可以完全覆盖点击场景。如果涉及较为复杂的触摸交互，还是需要自定义触摸事件上场，接下来我们继续来看自定义触摸事件的触发机制。
+
+
+
+## 2、RN系统触摸组件触发机制
+
+
+
+**单组件**
+
+在RN中任何View组件都可以实现自定义触摸事件，方式很简单，只需要将触摸事件行为方式作为props属性传递给View组件即可。测试代码如下：
+
+
+
+    componentWillMount() {
+        this.gestureHandlers = {
+            /**
+             * 在手指触摸开始时申请成为响应者
+             */
+            onStartShouldSetResponder: (evt) =>  {
+                console.log('onStartShouldSetResponder');
+                return true;
+            },
+            /**
+             * 在手指在屏幕移动时申请成为响应者
+             */
+            onMoveShouldSetResponder: (evt) => {
+                console.log('onMoveShouldSetResponder');
+                return true;
+            },
+            /**
+             * 申请成功，组件成为了事件处理响应者，这时组件就开始接收后序的触摸事件输入。
+             * 一般情况下，这时开始，组件进入了激活状态，并进行一些事件处理或者手势识别的初始化
+             */
+            onResponderGrant: (evt) => {
+                console.log('onResponderGrant');
+            },
+     
+            /**
+             * 表示申请失败了，这意味者其他组件正在进行事件处理，
+             * 并且它不想放弃事件处理，所以你的申请被拒绝了，后续输入事件不会传递给本组件进行处理。
+             */
+            onResponderReject: (evt) => {
+                console.log('onResponderReject');
+            },
+     
+            /**
+             * 表示手指按下时，成功申请为事件响应者的回调
+             */
+            onResponderStart: (evt) => {
+                console.log('onResponderStart');
+            },
+     
+            /**
+             * 表示触摸手指移动的事件，这个回调可能非常频繁，所以这个回调函数的内容需要尽量简单
+             */
+            onResponderMove: (evt) => {
+                console.log('onResponderMove');
+            },
+     
+            /**
+             * 表示触摸完成（touchUp）的时候的回调，表示用户完成了本次的触摸交互，这里应该完成手势识别的处理，
+             * 这以后，组件不再是事件响应者，组件取消激活
+             */
+            onResponderRelease: (evt) => {
+                console.log('onResponderRelease');
+            },
+     
+            /**
+             * 组件结束事件响应的回调
+             */
+            onResponderEnd: (evt) => {
+                console.log('onResponderEnd');
+            },
+     
+            /**
+             * 当其他组件申请成为响应者时，询问你是否可以释放响应者角色让给其他组件
+             */
+            onResponderTerminationRequest: (evt) => {
+                console.log('onResponderTerminationRequest');
+                return true;
+            },
+     
+            /**
+             * 如果 onResponderTerminationRequest 回调函数返回为 true，
+             * 则表示同意释放响应者角色，同时会回调如下函数，通知组件事件响应处理被终止
+             * 这可能是由于其他View通过onResponderTerminationRequest请求的，也可能是由操作系统强制夺权（比如iOS上的控制中心或是通知中心）。
+             */
+            onResponderTerminate: (evt) => {
+                console.log('onResponderTerminate');
+            }
+        }
+    }
+     
+    render() {
+        return (
+            <View { ...this.gestureHandlers } style={ styles.container } />
+        )
+    }
+上述代码中我们在 `ComponentWillMount `生命周期函数中定义了 gestureHandlers，并定义了触摸事件行为函数，通过 log 打印的方式来看自定义触摸事件执行机制。View组件的 style 样式为一个蓝色填充的圆形，附上效果图
+
+![2018102016525241](images/2018102016525241.png)
+
+
+
+
+
+效果图
+
+**测试用例**
+
+> （1）onStartShouldSetResponder  方法返回 false，onMoveShouldSetResponder 返回 false
+>
+> （2）onStartShouldSetResponder  方法返回 true，onMoveShouldSetResponder 返回 false
+>
+> （3）onStartShouldSetResponder  方法返回 false，onMoveShouldSetResponder 返回 true
+>
+> （4）onStartShouldSetResponder  方法返回 true，onMoveShouldSetResponder 返回 true
+
+
+
+测试触摸方式分两种：
+
+（1）单击事件
+
+（2）滑动事件
+
+
+
+**测试结果**
+
+测试结果
+
+（1）onStartShouldSetResponder  方法返回 false，onMoveShouldSetResponder 返回 false
+
+> 单击
+>
+> onStartShouldSetResponder
+>
+> 滑动
+>
+> onStartShouldSetResponder
+>
+> onMoveShouldSetResponder
+
+（2）onStartShouldSetResponder  方法返回 true，onMoveShouldSetResponder 返回 false
+
+   > 单击
+   >
+   > 按下
+   >    onStartShouldSetResponder
+   >    onResponderGrant
+   >    onResponderStart
+   >
+   > 弹起
+   >    onResponderEnd
+   >    onResponderRelease
+   >
+   > 滑动
+   >
+   >    按下
+   >    onStartShouldSetResponder
+   >    onResponderGrant
+   >    onResponderStart
+   >
+   >    移动
+   >    onResponderMove（多次执行）
+   >
+   >    弹起
+   >    onResponderEnd
+   >    onResponderRelease
+
+   
+
+（3）onStartShouldSetResponder  方法返回 false，onMoveShouldSetResponder 返回 true
+
+> 单击
+>
+> onStartShouldSetResponder
+>
+> 滑动
+>
+>    按下
+>    onStartShouldSetResponder
+>
+>    移动
+>    onMoveShouldSetResponder
+>    onResponderGrant
+>    onResponderMove（多次执行）
+>
+>    弹起
+>    onResponderEnd
+>    onResponderRelease
+
+
+
+（4）onStartShouldSetResponder  方法返回 true，onMoveShouldSetResponder 返回 true
+
+   > 与 onStartShouldSetResponder  方法返回 true，onMoveShouldSetResponder 返回 false 执行结果完全一致。
+
+**测试结论**
+
+测试结论
+
+（1）当 onStartShouldSetResponder 、onMoveShouldSetResponder 方法都返回 false，当手指按下或者进行移动时，RN系统询问当前组件并发现在点击和滑动时都不申请成为事件响应者，只会执行 onStartShouldSetResponder 、onMoveShouldSetResponder 方法，并立刻结束，后续触摸事件不会被触发。
+
+（2）onStartShouldSetResponder  方法返回 true，onMoveShouldSetResponder 返回 false，当手指按下时，RN系统询问当前组件，发现 onStartShouldSetResponder 方法返回 true，此时申请成为响应者（不存在多组件触摸事件互斥场景），在申请成功后，会依次执行 onResponderGrant 、onResponderStart 方法。由于当前组件已经成为了响应者，此时手指如果继续移动，系统并不会触发 onMoveShouldSetResponder 方法，并立刻执行 onResponderMove 方法。当手指离开屏幕，此时会触发onResponderEnd、onResponderRelease 方法，一次完整的触摸事件结束。
+
+（3）onStartShouldSetResponder  方法返回 false，onMoveShouldSetResponder 返回 true，当手指按下时，RN系统询问当前组件，发现 onStartShouldSetResponder 方法返回 false，此时不申请成为响应者，执行 onStartShouldSetResponder方法完毕后立刻结束。由于当前组件不是响应者，此时手指按下后如果继续移动，系统会触发 onMoveShouldSetResponder 方法，再次询问当前组件是否要申请成为响应者，此方法返回 true ，即申请成为响应者，在申请成功后，会依次执行 onResponderGrant 、onResponderMove 方法。当手指离开屏幕，此时会触发onResponderEnd、onResponderRelease 方法，一次完整的触摸事件结束。
+
+⚠️与（2）测试对比可以发现：当 onStartShouldSetResponder  方法返回 true，法返手指按下申请响应者授权成功后，会依次执行 onResponderGrant 、onResponderStart 方法。而当 onStartShouldSetResponder  方法返回 false，onMoveShouldSetResponder 方法返回 true 时，此时在滑动申请成为响应者授权成功后，会依次执行 onResponderGrant 、onResponderMove 方法，而不会触发onResponderStart 方法。
+
+（4）onStartShouldSetResponder  方法返回 true，onMoveShouldSetResponder 返回 true，结论是与onStartShouldSetResponder  方法返回 true，onMoveShouldSetResponder 返回 false，执行机制相同。其实此时结合上述的分析，我们很容易明白原因。在onStartShouldSetResponder  方法返回 true，并申请成为响应者，此时在移动过程中系统不会再去询问 onMoveShouldSetResponder，即会忽略该方法。并继续执行后续的触摸事件。最终形成一次完整的触摸事件操作。
+
+多组件
+
+在实际开发过程中，肯定不仅仅处理单组件触摸事件行为，可能会涉及到多个组件间的交互，或者多层次的嵌套组件交互。在RN中，我们知道在同一时刻，只会存在一个响应者。当使用一个手指激活一个组件成为响应者后，在当前手指不释放的情况下，又去触摸激活另一个组件会发生什么呢？这就会涉及到多个组件间共同申请响应者互斥的场景。还记得我们在基础篇中介绍的onResponderTerminationRequest、onResponderTerminate 方法吗？
+
+onResponderTerminationRequest 方法需要返回一个bool类型值，来决定当有其他组件同时申请成响应者时，当前组件是否放弃响应者权限。此时会分为两种情况：
+
+（1）onResponderTerminationRequest 方法返回 true
+
+         此时系统发现当有新当组件申请成为响应者时，当前组件会释放掉响应者身份，并将权限交与新组件。新组件onResponderGrant 方法被调用 ，当前组件的 onResponderTerminate 方法被调用，并将响应者身份权限状态释放。
+
+（2）onResponderTerminationRequest 方法返回 false
+
+        此时系统发现当有新当组件申请成为响应者时，当前组件不会释放掉响应者身份。新组件申请响应者权限失败，这也意味其他组件正在进行事件处理，并且它不想放弃事件处理，所以你的申请被拒绝了，后续输入事件不会传递给本组件进行处理。新组件的 onResponderReject 方法会被调用。
+
+由于在模拟器上不好模拟多指触控请求，当家可以尝试编写demo，并运行真机查看效果。
+
+在基础篇中，我们同样介绍了事件拦截机制。通过 onStartShouldSetResponderCapture、onMoveShouldSetResponderCapture 方法来决定当前组件是否需要拦截触摸事件。当组件的 onStartShouldSetResponderCapture 或者 onMoveShouldSetResponderCapture 方法 返回 true，表示会拦截掉当前触摸事件，交给自己处理。此时系统会忽略不执行 onStartShouldSetResponder、onMoveShouldSetResponder 方法直接执行onResponderGrant 标示当前组件已成为事件响应者，进而处理后续触摸事件。当前组件如果有子组件，那么子组件不会收到触摸事件。
+
+
+
+## 3、触摸手势高级API - PanResponder
+
+通过上述对于自定义View的触摸事件机制来看，对于开发者来说还是较为复杂，不够友好。使用起来也不是特别方便。官方同样考虑到这个问题，为我们提供了更高抽象到API：PanResponder。
+
+源码中对于create的描述：
+
+```
+- @param config Enhanced versions of all of the responder callbacks
+- that provide not only the typical `ResponderSyntheticEvent`, but also the
+- `PanResponder` gesture state. Simply replace the word `Responder` with
+- `PanResponder` in each of the typical `onResponder*` callbacks. For
+- example, the `config` object would look like:
+  *
+- - `onMoveShouldSetPanResponder: (e, gestureState) => {...}`
+- - `onMoveShouldSetPanResponderCapture: (e, gestureState) => {...}`
+- - `onStartShouldSetPanResponder: (e, gestureState) => {...}`
+- - `onStartShouldSetPanResponderCapture: (e, gestureState) => {...}`
+- - `onPanResponderReject: (e, gestureState) => {...}`
+- - `onPanResponderGrant: (e, gestureState) => {...}`
+- - `onPanResponderStart: (e, gestureState) => {...}`
+- - `onPanResponderEnd: (e, gestureState) => {...}`
+- - `onPanResponderRelease: (e, gestureState) => {...}`
+- - `onPanResponderMove: (e, gestureState) => {...}`
+- - `onPanResponderTerminate: (e, gestureState) => {...}`
+- - `onPanResponderTerminationRequest: (e, gestureState) => {...}`
+- - `onShouldBlockNativeResponder: (e, gestureState) => {...}`
+    *
+- In general, for events that have capture equivalents, we update the
+- gestureState once in the capture phase and can use it in the bubble phase
+- as well.
+  *
+- Be careful with onStartShould* callbacks. They only reflect updated
+- `gestureState` for start/end events that bubble/capture to the Node.
+- Once the node is the responder, you can rely on every start/end event
+- being processed by the gesture and `gestureState` being updated
+- accordingly. (numberActiveTouches) may not be totally accurate unless you
+- are the responder.
+```
+
+create(config: PanResponderCallbacks): PanResponderInstance;
+PanResponder 的使用方式非常简单，通过调用 PanResponder 的 create 静态方法创建手势对象，传入 config 参数实现对应的触摸回调即可。手势的逻辑和流程与自定义触摸事件保持一致。最后调用 panResponer 的 panHandlers 作为 props 传给View组件：
+
+```
+<View {...this.panResponder.panHandlers } style={ styles.container } />
+```
+
+
+官方对于 config 参数的描述：
+
+
+     @param config 所有响应者回调的增强版本，不仅提供典型的 ResponderSyntheticEvent，而且还提供 PanResponder 手势状态。只需将 onResponder * 一词改为 PanResponder 。例如，config 对象看起来像：
+     onMoveShouldSetPanResponder :( e，gestureState）=> {...}
+     onMoveShouldSetPanResponderCapture：（e，gestureState）=> {...}
+     onStartShouldSetPanResponder :( e，gestureState）=> {...}
+     onStartShouldSetPanResponderCapture：（e，gestureState）=> {...}
+     onPanResponderReject :( e，gestureState）=> {...}
+     onPanResponderGrant :( e，gestureState）=> {...}
+     onPanResponderStart :( e，gestureState）=> {...}
+     onPanResponderEnd :( e，gestureState）=> {...}
+     onPanResponderRelease :( e，gestureState）=> {...}
+     onPanResponderMove :( e，gestureState）=> {...}
+     onPanResponderTerminate：（e，gestureState）=> {...}
+     onPanResponderTerminationRequest：（e，gestureState）=> {...}
+     onShouldBlockNativeResponder :( e，gestureState）=> {...}
+
+通常来说，对那些有对应捕获事件的事件来说，我们在捕获阶段更新 gestureState 一次，然后在冒泡阶段直接使用即可。
+
+注意 onStartShould* 回调。他们只会在此节点冒泡/捕获的开始/结束事件中提供已经更新过的 gestureState。一旦这个节点成为了事件的响应者，则所有的开始/结束事件都会被手势正确处理，并且 gestureState 也会被正确更新。(numberActiveTouches)有可能没有包含所有的触摸点，除非组件本身就是触摸事件的响应者。
+
+可以发现PanResponder包含一个onShouldBlockNativeResponder 方法，该方法需要返回一个 bool 值，决定当前组件是否应该阻止原生组件成为JS响应者。 默认返回true。目前只支持android平台设备。
+
+了解完PanResponder具有的触摸方式，接下来我们看下gestureState参数包含的一些触摸事件属性：
+
+> stateID - 触摸状态的 ID。在屏幕上有至少一个触摸点的情况下，这个 ID 会一直有效。
+>
+> moveX - 最近一次移动时的屏幕横坐标
+>
+> moveY - 最近一次移动时的屏幕纵坐标
+>
+> x0 - 当响应器产生时的屏幕横坐标
+>
+> y0 - 当响应器产生时的屏幕纵坐标
+>
+> dx - 从触摸操作开始时的累计横向路程
+>
+> dy - 从触摸操作开始时的累计纵向路程
+>
+> vx - 当前的横向移动速度
+>
+> vy - 当前的纵向移动速度
+>
+> numberActiveTouches - 当前在屏幕上的有效触摸点的数量
+
+
+
+从属性的行为上来看，相对自定义的onResponder*触摸事件，提供了更高级的描述。例如：移动速度、累计滑动的坐标点等等。更方便开发者来处理一些复杂的触摸交互。
+
+ 
+
+## 4、触摸手势高级属性 - pointerEvents
+
+
+
+系统在View中提供了一个触摸事件的高级属性：pointerEvents。官方对该属性的描述为：控制View是否可以成为触摸事件的目标。
+
+官方为 pointerEvents 属性提供了4个可供选择的值：
+
+> none:  View永远不是触摸事件的目标，即发生在本组件与本组件的子组件上的触摸事件都会交给本组件的父组件处理.
+>
+> box-none:  发生在本组件显示范围内,但不是子组件显示范围内的事件交给本组件,在子组件显示范围内交给子组件处理，即视图永远不是触摸事件的目标，但它的子视图可以是。
+>
+> box-only: 发生在本组件显示范围内的触摸事件将全部由本组件处理,即使触摸事件发生在本组件的子组件显示范围内
+>
+> auto:  视图可以成为触摸事件的目标，但视组件的不同而定,并不是所有的子组件都支持box-none和box-only两个值
+
+
+
+
+由于 pointerEvents 不会影响布局/外观，因此我们选择不在样式上包含 pointerEvents。 是否将 pointerEvents 作为属性来设置，视平台而定。例如，在RN中，pointerEvents 作为View的属性来设置。但在 CSS 中，可能以className来设置。
+
+该属性可以方便我们处理类似“穿透”事件传递的处理。例如，绝对定位导致多层次view间的遮盖后，事件如何传递处理等。我们拿高德地图为例：
+
+![20181031182554576](images/20181031182554576.png) 
+
+在地图组件上覆盖了一层组件用来进行其他操作，又不想让这个图像组件影响用户手指拖动地图的操作，这时就需 pointerEvents 属性来解决这个问题.
+
+看上面的描述可能不太直观，为了模仿上述效果，我们在代码中定义一个可滑动列表，并且在列表上层定义一个View组件。
+
+大致代码如下：
+
+```
+<View style={styles.container}>
+    <FlatList 
+      data={listData}
+      renderItem={this.renderItem}
+    />
+   {this.renderModalView()}
+</View>
+
+
+
+// 列表item
+
+renderItem = ({ item, index }) => {
+return (
+  <Text style={ styles.itemText } onPress={() => this.toggleShowModalView()}>
+    {item}
+  </Text>
+)
+}
+
+// 展示隐藏modal视图
+
+toggleShowModalView() {
+this.setState({ showModal: !this.state.showModal });
+}
+
+
+
+// modal视图
+
+renderModalView() {
+return this.state.showModal ? (
+  <View style={ styles.secondView }>
+    <TouchableOpacity onPress={() => this.showModalView()}>
+      <Text style={ styles.text }>我是遮罩层视图</Text>
+    </TouchableOpacity>
+  </View>
+}	
+```
+
+
+
+在代码中，我们通过点击列表的item项来控制modalview的显示，点击modalview本身来隐藏。modal视图显示的情况下，效果图如下：
+
+![](images/20181106123959276.png) 
+
+
+
+ 
+
+（1）当我们在最外层View上设置 pointerEvents="box-only"，由于box-only属性会设置当前View上发生的触摸事件都会交给本组件处理，即使发生在子组件也是交与自身处理。所以，列表将不能被触发滑动。所以为了能让子视图能获得处理触摸事件的能力，最外层去掉设置，或者改为 box-none（发生在本组件范围内的交给本组件，发生在子组件显示范围内的交给子组件）。
+
+（2）默认不设置 pointerEvents 的情况下，当我们点击列表的item，显示出 ModalView，此时 ModalView 是覆盖在列表之上的。此时在 ModalView 的视图显示区域触摸移动，底部的列表不会被滑动。此时，我们可以在ModalView 的最外层容器设置pointerEvents="none"，再次在ModalView视图显示区域触摸移动时，就可以同时触发列表滑动了。
+
+更多关于 pointerEvents 的用法，大家可以在实际开发中尝试使用即可。
+
+ 
+
+ 以上就是关于手势触摸的全部内容了，我们花了大量的篇幅通过代码执行的日志结果分析了触摸事件的行为方式，相信大家对于RN触摸事件有了更加深刻的认知。学而不思则罔，思而不学则殆。接下来我们通过实现高仿微信通讯录快速查找，来加深触摸手势在实际开发过程中的实现流程。
+
+
+
+## 5、高仿微信通讯录字母索引导航栏
+
+
+
+实现微信通讯录右侧字母索引导航，需要我们处理手势相关的操作行为。使用自定义触摸事件及 PanResponder，都可以相对轻松的完成。本例中，我们将介绍使用 PanResponder 如何实现。
+
+从整体交互分析来看，要实现该功能有以下几点：
+
+（1）手指按下或单击时，字母导航栏背景色改变，得到当前触摸区域对应的字母，并在屏幕中心以 Dialog 方式显示，根据index 将 SectionLst 滑动到对应位置
+
+（2）手指触摸字母导航栏区域，并滑动，则同样得到当前触摸区域对应的字母，并在屏幕中心以 Dialog 方式显示，根据index 将 SectionLst 滑动到对应位置
+
+（3）手指离开屏幕，字母导航栏背景色还原，Dialog 隐藏
+
+在实现之前，我们先定义好需要使用到的常量：
+
+```
+const { height } = Dimensions.get('window');
+// 标题栏高度
+const HEADER_HEIGHT = 64; 
+// 字母搜索容器高度
+const WORD_SEARCH_CONTAINER_HEIGHT = height - HEADER_HEIGHT; 
+// 字母搜索容器纵向 padding 
+const WORD_SEARCH_CONTAINER_V_PADDING = 8; 
+// 字母触摸区域之外的高度（标题栏，padding，margin等）
+const WORD_TOUCH_OUTSIDE_HEIGHT = HEADER_HEIGHT + WORD_SEARCH_CONTAINER_V_PADDING * 2
+// 单个字母高度
+const WORD_HEIGHT = Math.floor((WORD_SEARCH_CONTAINER_HEIGHT - WORD_SEARCH_CONTAINER_V_PADDING * 2) / 28);
+// 搜索字母，长度: 28
+const WORDS = ['↑', '✩' ,'A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W', 'X', 'Y', 'Z', '#'];
+```
+
+
+
+要实现第一步，首先需要使当前索引导航栏成为事件响应者。为了方便，我们将其封装成单独组件，也符合了RN的组件化开发思想。在手指按下时，需要使当前组件申请成为响应者，所以我们需要实现 onStartSetShouldPanResponder 方法，并 return true。在成为响应者，授权成功后，改变导航栏背景色，即在 onPanResponderGrant 方法中，更新当前组件背景色。同时获取当前触摸的y坐标点，因为我们根据屏幕高度固定了每个字母占据的空间高度，所以可以根据当前触摸屏幕的y坐标点结合字母空间高度计算出当前的字母 index。根据 index 即可获取到第几个字母。并作dialog展示。
+
+```
+onStartShouldSetPanResponderCapture: (evt, gestureState) => {
+    return true;
+},
+onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+},
+onStartShouldSetPanResponder: (evt, gestureState) => {
+    return true;
+},
+onPanResponderGrant: (evt, gestureState) => {
+    const { index, word }  = this.getWord(gestureState.y0);
+    this.props.showWordDialog && this.props.showWordDialog(index, word);
+    this.changeBgColor(this.refs.wordContainer, 'rgba(0,0,0,0.3)');
+}
+```
+
+
+
+第二步：监听手势滑动，我们需要实现 onPanResponderMove 方法，在该方法中，获取当前滑动所在屏幕的 y 坐标点，重复第二步的计算，得出当前触摸区域对应的字母。
+
+```
+onPanResponderMove:(evt, gestureState) => {
+    // 获取当前滑动到的位置，根据当前位置，取出index 对应 word
+    const { index, word } = this.getWord(gestureState.moveY);
+    this.props.showWordDialog && this.props.showWordDialog(index, word);
+}
+```
+
+
+
+第三步：在手指离开屏幕后，当前触摸事件结束，可以在 onPanResponderRelease 方法中以回调方式隐藏 dialog。
+
+```
+onPanResponderRelease:(evt, gestureState) => {
+    //  隐藏dialog
+    this.props.hideWordDialog && this.props.hideWordDialog();
+    this.changeBgColor(this.refs.wordContainer, 'transparent');
+}
+```
+
+
+
+通过以上三步，我们就能很轻松的实现字母索引导航栏的效果了。为了高度可定制化，将dialog的实现方式剥离，以回调的方式在索引组件中实现，降低组件间依赖。
+
+```
+// 显示字母Dialog提示
+
+showWordDialog(index, word) {
+this.setState({
+  word
+});
+this.scrollSectionList(index)
+}
+
+// 隐藏字母Dialog提示
+hideWordDialog() {
+this.setState({ word: null });
+}
+
+
+
+// 滚动SectionList
+
+scrollSectionList(index) {
+this.refs.sectionList.scrollToLocation({animated: false, itemIndex: 0, sectionIndex: index, viewOffset: 26});
+}
+```
+
+
+
+
+
+根据索引滑动列表到功能，我们可以结合SectionList来实现。具体可以看源码即可。关于React Native触摸手势事件的内容就全部结束了。通过基础篇、进阶篇两篇内容从基础的了解到功能的实践，相信大家对RN的触摸事件系统有了非常深刻的理解。
