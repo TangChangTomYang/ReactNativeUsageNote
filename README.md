@@ -3569,3 +3569,174 @@ ws.onclose = (e) => {
   ```
 
   
+
+
+
+
+
+#十五、React Native 传参的方式
+
+
+
+##1、React Native 导航传值
+
+- 适用范围: 相邻页面间传值
+
+  > 导航传值即可正向传值，也可反向传值 例如 `A->B` 是正向传值， 而`B->A` 则是反向传值  
+
+- 兼容性: IOS/Android
+
+- 原理: React Navigation 为页面的 props 上挂载了 navigation 对象, 可用来做路由跳转，在做页面跳转时可以携带参数/回调方法前往目标页面， 从而达到传参的目的
+
+  > 说明: 这是官方推荐，也是我们在业务开发中用得最多，最为推崇的一种传参方式, 思想与 web 在 querystring 上带参跳转类似，只是实现方式略微不同, 举例：
+  - 正向传值:
+
+  ```
+  A页面跳转向B页面, 在组件内通过访问 this.props.navigation.navigate('B', { 
+     type: 'list',         
+     callback：data => { console.log('data in callback: ', data); }
+    });
+    
+   在B页面 就能在组件的生命周期函数中拿到值
+    componentWillMount() {
+      const { state: { params: { type, callback }, goBack }} = this.props.navigation;
+      console.log('type: ', type);
+      // type 'list'
+    }
+  ```
+
+  - 反向传值：
+
+  ```
+  在反回前一个页面时, 手动调用callback，并给其传参, 再调用 goBack 方法， 即可达到目的。
+   还是上面的例子:
+   当从B返回A的时候
+   goBackToPageA: () => {
+      const { state: { params: { type, callback }, goBack }} = this.props.navigation;
+      callback({ id: '123', message: type + ' really?'});
+      goBack();
+   }
+   goBackToPageA();
+  
+   回到A页面后
+   'data in callback: ', { id: '123', message: 'list really?'});
+   也即callBack 中的 data 参数就是 { id: '123', message: 'list really?'}
+  ```
+
+  
+
+
+
+##2、DeviceEventEmitter 触发事件并传值
+
+- 适用范围: 页面间传值/组件间传值
+
+- 兼容性: IOS/Android
+
+- 原理: 利用 React Native 包中提供的 DeviceEventEmitter 模块订阅事件，触发事件，同时传值
+  说明: DeviceEventEmitter 从名字就能知道他是基于事件订阅的机制来进行传值的, 当订阅某种事件后， 触发的时候会调用订阅事件的回调, 并能把值传送过去, 并且在同页面内的组间件， 不同页面间都可以传值, 但前提是页面还未被销毁(销毁后事件的订阅会取消), 例如:
+
+  ```
+   DeviceEventEmitter.addListener('warning_event', (data) => { console.log('data: ', data);})
+    DeviceEventEmitter.emit('warning_event', { name: 'Mega Galaxy'});
+    //  data: { name: 'Mega Galaxy' }
+  
+    在emit(触发)事件后, 回调函数的入参就变成了我们所传递的 { name: 'Mega Galaxy'}, 
+    也可不传值,不传值时 callback 的入参就是 undefined
+  ```
+
+  缺点: 本质是对自定义事件的监听与触发， 当页面逻辑复杂时，代码量会增多， 维护成本变高， 且监听过多会造成性能问题， 还有一点就是在页面销毁时必须移除监听: 如果忘记移除监听会怎么样? 那每当 emit 事件一次， 就会多响应一次你加上去的监听
+
+  ```
+  componentDidMount() {
+      this.eventHandler = DeviceEventEmitter.addListner('event_name', callback);
+  }
+  componentWillUnmount() {
+      this.eventHandler.remove();
+  }
+  ```
+
+  
+
+##3、AsyncStorage Key-Value 式的存储传参
+
+- 适用范围: 跨页面 跨组件的任性传参
+
+- 兼容性: IOS/Android
+
+- 原理: 利用类似 web 中 localStorage 的思想，将参数/数据存放在 AsyncStorage中，在需要的地方再取出来
+
+  > 说明: localStorage 在 web 中的实用性 与 受欢迎程度大家是知道的， AsyncStorage其实就是 rn 版的 localStorage, 略微不同的是它是异步的，只返回 Promise, 所以与 async/await 结合会非常好用 
+
+```
+在A页面
+saveOrderData = async () => {
+  try {
+    const orderData = [{ id: 1, data: []}, { id: 2, data: []}]
+    await AsyncStorage.setItem('Order_data_cache', JSON.stringify(orderData ));
+  } catch (error) {
+    // Error saving data
+  }
+}
+
+在B页面
+loadOrderData = async () => {
+  const __orderData = await AsyncStorage.getItem('Order_data_cache');
+  const orderData = JSON.parse(__orderData);
+  this.setState({ orderData });
+}
+```
+
+> 缺点: 以 Key-Value 式的存储传参，可能重点还是在数据存储上, 且因为涉及到 I/O 的操作，在部份低端机型上，有卡顿的可能性
+
+
+
+##4、React Context Api 传参(新版Context Api)
+
+- 适用范围: 不同页面内的组件共享公共类的数据
+
+- 兼容性: IOS/Android
+
+- 原理: 利用生成的数据仓库包裹父级组件, 再从子组件中获取数据仓库中的数据 
+
+  > 说明: Context Api 在管理登录用户数据这类具有公共属性的数据是一把利器， 但使用起来会相当繁琐
+
+  ```
+  const ContextWrapper = React.createContext();
+    <ContextWrapper.Provider value={{ name: 'Mega Galaxy', job: 'FrontEnd Engineer' }}
+      <App />
+    <ContextWrapper.Provider>
+    // 注意这里的 <App /> 是指我们 App的根组件，在包裹根组件后 我们可以在任意子页面组件 中取值
+  
+    任意 <App /> 里的子页面组件中
+  
+    <ContextWrapper.Counsumer> 
+      { context => <Text> { context.name } { context.job }</Text> }
+    </ContextWrapper.Counsumer>
+    会渲染成 <Text> Mega Galaxy FrontEnd Engineer </Text>
+  ```
+
+##5、Global 传值
+
+- 适用范围: 页面间传值（全局任意页面）
+
+- 兼容性: IOS/Android
+
+- 原理: 利用 Node.js 中的顶级对象 -- Global. 来挂载属性, 利用属性传值
+
+  > 说明: 在跳转的页面前，可以把需要传递的参数挂载在 Global 对象上, 在跳转后即可在 Global 对象上访问键取到对应的值, 例如:
+
+```
+在 A 页面：
+    Global.params = { name: 'Jalon', id: '123456'}, 
+跳转任意页面后：
+    Global.params // { name: 'Jalon', id: '123456'}
+
+除了字值串,布尔值,对象 和 数组, 也可以传递函数, 
+如果传递的函数有引用组件上下文环境的变量，注意解耦，否则可能会报错. 
+```
+
+缺点: 如果挂载的属性/方法过多 易造成冲突与污染, 不利于维护
+个人建议: 在 react-navigation 跳转传值 与 DeviceEventEmitter 维护不方便的情况下才使用, 但尽量少用, 以免造成全局属性的污染与冲突
+
+总结了5种常见的参数/数据传递的方法，以个人角度来看， 推荐顺序为 React Navigation 导航传值 > DeviceEventEmitter 触发事件并传值 > AsyncStorage Key-Value 式的存储传参, 最后 两种是在特殊场景下才会去使用，所以在合适的场景去选择合适的方式传值，会为React Native项目的开发带来事半功倍的效果．
